@@ -1,10 +1,8 @@
 library oauth.token;
 import 'dart:convert';
 import 'dart:typed_data';
-import 'utils.dart' as utils;
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:cipher/cipher.dart';
-import 'package:cipher/random/secure_random_base.dart';
+import 'package:pointycastle/pointycastle.dart';
 import 'package:bignum/bignum.dart';
 import 'core.dart';
 
@@ -53,7 +51,7 @@ abstract class Tokens {
   List<int> sign(List<int> value);
   
   /** Verify [signature] is correct for [value] using this token */
-  bool      verify(List<int> signature, List<int> value);
+  bool verify(List<int> signature, List<int> value);
 }
 
 class HmacSha1Tokens extends Tokens {
@@ -87,9 +85,8 @@ class HmacSha1Tokens extends Tokens {
   
   List<int> sign(List<int> value) {
     var secret = _computeKey();    
-    var mac = new crypto.HMAC(new crypto.SHA1(), secret);
-    mac.add(value);
-    return mac.close();
+    var mac = new crypto.Hmac(crypto.sha1, secret);
+    return mac.convert(value).bytes;
   }
   
   bool verify(List<int> signature, List<int> value) {
@@ -107,7 +104,7 @@ class HmacSha1Tokens extends Tokens {
 }
 
 BigInteger _b64bigint(String str) {
-  return new BigInteger(crypto.CryptoUtils.base64StringToBytes(str));
+  return new BigInteger(BASE64URL.decode(str));
 }
 
 bool _checkContains(Map map, List params, String error, bool need) {
@@ -122,24 +119,6 @@ bool _checkContains(Map map, List params, String error, bool need) {
     throw new ArgumentError(error);
   }
   return expect;
-}
-
-// impl. of Cipher's SecureRandom which just uses our getRandomBytes
-class _SecureRandom extends SecureRandomBase {
-  String get algorithmName => "OAuth.getRandomBytes";
-  List<int> bytes;
-  
-  void seed(CipherParameters params) {}
-
-  int nextUint8() {
-    if(bytes == null || bytes.isEmpty) {
-      bytes = utils.getRandomBytes(128);
-    }
-    
-    return bytes.removeLast();
-  }
-  
-  static var INSTANCE = new _SecureRandom();
 }
 
 class _KeyPair {
@@ -191,6 +170,8 @@ class RsaSha1Tokens extends Tokens {
   final String        userId;
   final RSAPublicKey  userPublicKey;
   final RSAPrivateKey userPrivateKey;
+
+  static final _SecureRandom = new SecureRandom("OAuth.getRandomBytes");
   
   /** Creates RSA-SHA1 tokens from JSON Web Token encoded RSA keys */
   factory RsaSha1Tokens({
@@ -235,7 +216,7 @@ class RsaSha1Tokens extends Tokens {
     if(userPrivateKey != null)
       privateKey = userPrivateKey;
     
-    var params = new ParametersWithRandom(new PrivateKeyParameter(privateKey), _SecureRandom.INSTANCE);
+    var params = new ParametersWithRandom(new PrivateKeyParameter(privateKey), _SecureRandom);
     signer.init(true,  params);
     return signer.generateSignature(body).bytes;
   }
@@ -247,7 +228,7 @@ class RsaSha1Tokens extends Tokens {
     if(userPublicKey != null)
       publicKey = userPublicKey;
     
-    var params = new ParametersWithRandom(new PublicKeyParameter(publicKey), _SecureRandom.INSTANCE);
+    var params = new ParametersWithRandom(new PublicKeyParameter(publicKey), _SecureRandom);
     signer.init(false,  params);
     return signer.verifySignature(body, new RSASignature(new Uint8List.fromList(body)));
   }

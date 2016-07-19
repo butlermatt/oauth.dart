@@ -2,19 +2,19 @@
  */
 library oauth.client;
 import 'dart:async';
+import 'dart:convert' show BASE64, BASE64URL;
 import 'dart:io';
 import 'package:oauth/src/utils.dart';
 import 'package:oauth/src/core.dart';
 import 'package:oauth/src/token.dart';
 import 'package:http/http.dart' as http;
-import 'package:crypto/crypto.dart' as crypto;
 export 'package:oauth/src/token.dart' show Tokens;
 
 /** Generate the parameters to be included in the `Authorization:` header of a
  *  request. Generally you should prefer use of [signRequest] or [Client] 
  */
 Map<String, String> generateParameters(
-    http.BaseRequest request,
+    http.Request request,
     Tokens tokens, 
     String nonce,
     int timestamp) {
@@ -40,7 +40,7 @@ Map<String, String> generateParameters(
   } 
   
   var sigBase = computeSignatureBase(request.method, request.url, requestParams);
-  params["oauth_signature"] = crypto.CryptoUtils.bytesToBase64(tokens.sign(sigBase));
+  params["oauth_signature"] = BASE64.encode(tokens.sign(sigBase));
   
   return params;
 }
@@ -97,7 +97,7 @@ class Client extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) {
       var nonce = getRandomBytes(8);
-      String nonceStr = crypto.CryptoUtils.bytesToBase64(nonce, urlSafe: true);
+      String nonceStr = BASE64URL.encode(nonce);
       signRequest(request, tokens, nonceStr,
                   new DateTime.now().millisecondsSinceEpoch ~/ 1000);
       return _client.send(request);
